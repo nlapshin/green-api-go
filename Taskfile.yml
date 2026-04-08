@@ -1,0 +1,39 @@
+version: "3"
+
+tasks:
+  run:
+    desc: Run app locally (uses .env if present)
+    cmds:
+      - go run ./cmd/app
+
+  build:
+    desc: Build binary to ./bin/app
+    cmds:
+      - mkdir -p bin
+      - go build -o ./bin/app ./cmd/app
+
+  vet:
+    desc: go vet
+    cmds:
+      - go vet ./...
+
+  docker:build:
+    desc: Build Docker image
+    cmds:
+      - docker build -t green-api-test:local .
+
+  docker:up:
+    desc: Start via docker compose
+    cmds:
+      - docker compose up --build
+
+  docker:down:
+    desc: Stop docker compose
+    cmds:
+      - docker compose down
+
+  swagger:
+    desc: Regenerate Swagger 2.0 (docs/) from handler annotations; requires swag v1.16.x
+    cmds:
+      - swag init -g cmd/app/main.go -o docs --parseDependency --parseInternal
+

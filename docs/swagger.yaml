@@ -1,0 +1,224 @@
+basePath: /
+definitions:
+  green-api-test_internal_domain.APIError:
+    properties:
+      code:
+        type: string
+      details: {}
+      message:
+        type: string
+    type: object
+  green-api-test_internal_domain.APIResponse:
+    properties:
+      error:
+        $ref: '#/definitions/green-api-test_internal_domain.APIError'
+      ok:
+        type: boolean
+      pretty:
+        type: string
+    type: object
+  green-api-test_internal_domain.SendFileByURLRequest:
+    properties:
+      apiTokenInstance:
+        type: string
+      caption:
+        type: string
+      chatId:
+        type: string
+      fileName:
+        type: string
+      fileUrl:
+        type: string
+      idInstance:
+        type: string
+    type: object
+  green-api-test_internal_domain.SendMessageRequest:
+    properties:
+      apiTokenInstance:
+        type: string
+      chatId:
+        type: string
+      idInstance:
+        type: string
+      message:
+        type: string
+    type: object
+info:
+  contact: {}
+  description: Minimal HTTP API that forwards selected Green-API calls. Instance credentials
+    are accepted via `X-Instance-Id` and `X-Api-Token` headers (and may be merged
+    from JSON on POST bodies). Success responses wrap upstream JSON as pretty-printed
+    text in `pretty`.
+  title: Green-API HTTP proxy
+  version: "1.0"
+paths:
+  /:
+    get:
+      description: Simple browser UI for trying the proxy (not required for API clients).
+      produces:
+      - text/html
+      responses:
+        "200":
+          description: HTML page
+          schema:
+            type: string
+      summary: Demo UI
+      tags:
+      - ui
+  /api/get-settings:
+    get:
+      description: Forwards to Green-API using `idInstance` / `apiTokenInstance` from
+        headers.
+      parameters:
+      - description: Green-API idInstance (digits)
+        in: header
+        name: X-Instance-Id
+        required: true
+        type: string
+      - description: Green-API apiTokenInstance
+        in: header
+        name: X-Api-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: ok=true, pretty=formatted upstream JSON
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+        "400":
+          description: validation_error or invalid_json
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+        "502":
+          description: upstream integration error
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+      summary: Get instance settings
+      tags:
+      - api
+  /api/get-state-instance:
+    get:
+      description: Returns authorization / instance state from Green-API.
+      parameters:
+      - description: Green-API idInstance (digits)
+        in: header
+        name: X-Instance-Id
+        required: true
+        type: string
+      - description: Green-API apiTokenInstance
+        in: header
+        name: X-Api-Token
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+      summary: Get instance state
+      tags:
+      - api
+  /api/send-file-by-url:
+    post:
+      consumes:
+      - application/json
+      description: 'JSON body: chatId, fileUrl, fileName; optional caption. Headers
+        override embedded credentials.'
+      parameters:
+      - description: Green-API idInstance
+        in: header
+        name: X-Instance-Id
+        type: string
+      - description: Green-API apiTokenInstance
+        in: header
+        name: X-Api-Token
+        type: string
+      - description: Payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/green-api-test_internal_domain.SendFileByURLRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+      summary: Send file by URL
+      tags:
+      - api
+  /api/send-message:
+    post:
+      consumes:
+      - application/json
+      description: JSON body must include chatId and message. Credentials in headers
+        override body fields when both are present.
+      parameters:
+      - description: Green-API idInstance (optional if present in body)
+        in: header
+        name: X-Instance-Id
+        type: string
+      - description: Green-API apiTokenInstance (optional if present in body)
+        in: header
+        name: X-Api-Token
+        type: string
+      - description: Payload
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/green-api-test_internal_domain.SendMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+        "502":
+          description: Bad Gateway
+          schema:
+            $ref: '#/definitions/green-api-test_internal_domain.APIResponse'
+      summary: Send text message
+      tags:
+      - api
+  /healthz:
+    get:
+      description: Returns plain text `ok`.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+      summary: Health check
+      tags:
+      - system
+swagger: "2.0"

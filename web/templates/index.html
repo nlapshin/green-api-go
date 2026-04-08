@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ru">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Green-API — панель</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+
+<body>
+  <div class="page">
+    <div class="chrome">
+      <div class="chrome__bar">
+        <div class="chrome__dots" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </div>
+        <div class="chrome__title">Green-API</div>
+      </div>
+
+      <header class="header">
+        <div class="header__title">GREEN-API</div>
+      </header>
+
+      <main class="layout">
+        <section class="panel panel--left">
+          <div class="section">
+            <div class="section__title">Подключение</div>
+            <div class="stack">
+              <label class="field">
+                <span class="field__label">idInstance</span>
+                <input class="field__input" id="idInstance" type="text" autocomplete="off" placeholder="1101…" />
+              </label>
+              <label class="field">
+                <span class="field__label">apiTokenInstance</span>
+                <input class="field__input" id="apiTokenInstance" type="password" autocomplete="off"
+                  placeholder="ваш токен" />
+              </label>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section__title">GET</div>
+            <div class="actions">
+              <button class="btn" type="button" data-action="getSettings">getSettings</button>
+              <button class="btn" type="button" data-action="getStateInstance">getStateInstance</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section__title">sendMessage</div>
+            <div class="stack">
+              <label class="field">
+                <span class="field__label">chatId</span>
+                <input class="field__input" id="sm_chatId" type="text" autocomplete="off"
+                  placeholder="77771234567@c.us" />
+              </label>
+              <label class="field">
+                <span class="field__label">message</span>
+                <textarea class="field__input field__input--textarea" id="sm_message" rows="4"
+                  placeholder="Hello World!"></textarea>
+              </label>
+            </div>
+            <div class="actions">
+              <button class="btn btn--primary" type="button" data-action="sendMessage">sendMessage</button>
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="section__title">sendFileByUrl</div>
+            <div class="stack">
+              <label class="field">
+                <span class="field__label">chatId</span>
+                <input class="field__input" id="sf_chatId" type="text" autocomplete="off"
+                  placeholder="77771234567@c.us" />
+              </label>
+              <label class="field">
+                <span class="field__label">fileUrl</span>
+                <input class="field__input" id="sf_fileUrl" type="url" autocomplete="off"
+                  placeholder="https://my.site.com/img/horse.png" />
+              </label>
+              <label class="field">
+                <span class="field__label">fileName</span>
+                <input class="field__input" id="sf_fileName" type="text" autocomplete="off" placeholder="horse.png"
+                  required />
+              </label>
+              <label class="field">
+                <span class="field__label">caption (optional)</span>
+                <input class="field__input" id="sf_caption" type="text" autocomplete="off"
+                  placeholder="Подпись к файлу" />
+              </label>
+            </div>
+            <div class="actions">
+              <button class="btn btn--primary" type="button" data-action="sendFileByUrl">sendFileByUrl</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel panel--right">
+          <div class="response-pane">
+            <div class="response-pane__head">
+              <span class="response-pane__label">Ответ</span>
+              <span class="status" id="status"></span>
+            </div>
+            <pre class="output" id="output" aria-label="Ответ API"></pre>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script src="/static/app.js" defer></script>
+</body>
+
+</html>
