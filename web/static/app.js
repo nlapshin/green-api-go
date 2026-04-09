@@ -53,10 +53,19 @@ async function callAPI(method, path, jsonBody) {
   }
   try {
     const res = await fetch(path, { method, headers, body });
-    const data = await res.json().catch(() => null);
-    if (!data) {
+    // Читаем тело ровно один раз: после неудачного res.json() поток уже израсходован — второй .text() даёт TypeError.
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
       setStatus("err", "Ошибка: сервер вернул не-JSON");
-      setOutput(await res.text());
+      setOutput(text);
+      return;
+    }
+    if (data === null || typeof data !== "object") {
+      setStatus("err", "Ошибка: неожиданный ответ сервера");
+      setOutput(text);
       return;
     }
     if (!res.ok || !data.ok) {

@@ -2,9 +2,9 @@
 
 Небольшой HTTP-сервис: браузер и клиенты ходят только в этот backend; он валидирует вход, вызывает официальный [Green-API](https://green-api.com) и возвращает единый JSON-оболочкой. Есть веб-интерфейс для ручных вызовов и Swagger UI с описанием API.
 
-**Базовый URL (после деплоя):** `https://YOUR-SERVICE.onrender.com`  
-**Swagger UI:** `https://YOUR-SERVICE.onrender.com/swagger/index.html`  
-**Метрики (Prometheus):** `GET /metrics`
+**Публичный сервис (Render):** [https://green-api-go.onrender.com](https://green-api-go.onrender.com)  
+**Swagger UI:** [https://green-api-go.onrender.com/swagger/index.html](https://green-api-go.onrender.com/swagger/index.html)  
+**Метрики (Prometheus):** [https://green-api-go.onrender.com/metrics](https://green-api-go.onrender.com/metrics)
 
 ## Возможности
 
@@ -233,14 +233,16 @@ docker compose up --build
 
 ## Примеры curl
 
+Ниже хост продакшена на Render; для вызова к локальному серверу замените на `http://localhost:8080`.
+
 ```bash
-curl -sS http://localhost:8080/api/v1/get-settings \
+curl -sS https://green-api-go.onrender.com/api/v1/get-settings \
   -H 'X-Instance-Id: 1101234567' \
   -H 'X-Api-Token: YOUR_TOKEN'
 ```
 
 ```bash
-curl -sS http://localhost:8080/api/v1/send-message \
+curl -sS https://green-api-go.onrender.com/api/v1/send-message \
   -H 'Content-Type: application/json; charset=utf-8' \
   -H 'X-Instance-Id: 1101234567' \
   -H 'X-Api-Token: YOUR_TOKEN' \
@@ -271,7 +273,7 @@ curl -sS http://localhost:8080/api/v1/send-message \
 
 **Render** — если нужен быстрый публичный URL с минимальной настройкой; **Fly.io** — если приоритет контейнерному деплою и больший контроль.
 
-После выкладки подставьте в начало README фактические URL сервиса и Swagger UI.
+Текущий деплой: **https://green-api-go.onrender.com** (Swagger и `/metrics` — см. начало README).
 
 ## Структура репозитория
 
