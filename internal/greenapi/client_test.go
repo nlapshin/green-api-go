@@ -110,8 +110,37 @@ func TestClient_HTTPErrorRetryable(t *testing.T) {
 	}
 }
 
-func TestClient_401NotRetryable(t *testing.T) {
+func TestClient_retries_transient_503_then_success(t *testing.T) {
+	var n int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
+		if n < 3 {
+			http.Error(w, "unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	c := mustClient(t, Config{BaseURL: srv.URL, Timeout: 5 * time.Second, Logger: testLogger()})
+	raw, err := c.GetSettings(context.Background(), domain.ConnectRequest{
+		IDInstance: "11001234", APITokenInstance: "t",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 3 {
+		t.Fatalf("expected 3 upstream attempts, got %d", n)
+	}
+	if string(raw) != `{"ok":true}` {
+		t.Fatalf("body: %s", raw)
+	}
+}
+
+func TestClient_does_not_retry_401(t *testing.T) {
+	var n int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n++
 		http.Error(w, "nope", http.StatusUnauthorized)
 	}))
 	defer srv.Close()
@@ -122,7 +151,10 @@ func TestClient_401NotRetryable(t *testing.T) {
 	})
 	var he *HTTPError
 	if err == nil || !errors.As(err, &he) {
-		t.Fatal(err)
+		t.Fatalf("expected HTTPError, got %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected single attempt, got %d", n)
 	}
 	if he.Retryable() {
 		t.Fatal("401 should not be retryable")

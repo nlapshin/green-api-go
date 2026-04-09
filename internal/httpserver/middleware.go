@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-chi/chi/v5/middleware"
 
-	"green-api-test/internal/domain"
 	"green-api-test/internal/httpx"
 )
 
@@ -49,13 +48,7 @@ func RecovererJSON(log *slog.Logger) func(http.Handler) http.Handler {
 						slog.Any("recover", rec),
 						slog.String("stack", string(bytes.TrimSpace(debug.Stack()))),
 					)
-					httpx.WriteJSON(w, http.StatusInternalServerError, domain.APIResponse{
-						OK: false,
-						Error: &domain.APIError{
-							Code:    "internal_error",
-							Message: "Internal server error",
-						},
-					})
+					httpx.WriteAPIErrorResponse(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 				}
 			}()
 			next.ServeHTTP(w, r)

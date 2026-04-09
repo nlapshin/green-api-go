@@ -6,4 +6,7 @@ const (
 	MaxFileNameRunes = 255
 	MaxIDInstanceLen = 32
 	MaxAPITokenLen   = 128
+
+	// MaxJSONRequestBody limits JSON bodies on POST API handlers (pretty-printed error if exceeded).
+	MaxJSONRequestBody = 1 << 20 // 1 MiB
 )

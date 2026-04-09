@@ -1,0 +1,21 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+linters-settings:
+  staticcheck:
+    checks: ["all", "-ST1000"]
+
+issues:
+  exclude-rules:
+    - path: docs/docs\.go
+      linters:
+        - staticcheck
+        - unused

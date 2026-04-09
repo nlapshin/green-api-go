@@ -9,32 +9,30 @@ import (
 	"green-api-test/internal/jsonfmt"
 )
 
-func writeAPIError(w http.ResponseWriter, status int, code, message string, details any) {
-	httpx.WriteJSON(w, status, domain.APIResponse{
-		OK: false,
-		Error: &domain.APIError{
-			Code:    code,
-			Message: message,
-			Details: details,
-		},
-	})
+func writeAPIError(w http.ResponseWriter, r *http.Request, status int, code, message string, details any) {
+	httpx.WriteAPIErrorResponse(w, r, status, code, message, details)
 }
 
-func writeDecodeError(w http.ResponseWriter, err error) {
-	msg := "Invalid JSON"
-	if errors.Is(err, httpx.ErrBodyRequired) {
-		msg = "Request body is required"
+func writeDecodeError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, httpx.ErrBodyTooLarge):
+		writeAPIError(w, r, http.StatusRequestEntityTooLarge, "payload_too_large", "Request body is too large", nil)
+		return
+	case errors.Is(err, httpx.ErrBodyRequired):
+		writeAPIError(w, r, http.StatusBadRequest, "invalid_json", "Request body is required", nil)
+		return
+	default:
+		writeAPIError(w, r, http.StatusBadRequest, "invalid_json", "Invalid JSON", nil)
 	}
-	writeAPIError(w, http.StatusBadRequest, "invalid_json", msg, nil)
 }
 
-func writeValidationError(w http.ResponseWriter, err error) {
+func writeValidationError(w http.ResponseWriter, r *http.Request, err error) {
 	var ve *domain.ValidationError
 	if errors.As(err, &ve) {
-		writeAPIError(w, http.StatusBadRequest, "validation_error", "Validation error", ve.FieldsOrNil())
+		writeAPIError(w, r, http.StatusBadRequest, "validation_error", "Validation error", ve.FieldsOrNil())
 		return
 	}
-	writeAPIError(w, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
+	writeAPIError(w, r, http.StatusInternalServerError, "internal_error", "Internal server error", nil)
 }
 
 func writeProxySuccess(w http.ResponseWriter, raw []byte) {

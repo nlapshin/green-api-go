@@ -20,6 +20,7 @@ var (
 	ErrInvalidJSON     = errors.New("invalid json")
 	ErrUnexpectedExtra = errors.New("unexpected extra json data")
 	ErrReadBody        = errors.New("failed to read body")
+	ErrBodyTooLarge    = errors.New("request body too large")
 )
 
 func DecodeStrictJSON(w http.ResponseWriter, r *http.Request, dst any, maxBytes int64) error {
@@ -35,6 +36,10 @@ func DecodeStrictJSON(w http.ResponseWriter, r *http.Request, dst any, maxBytes 
 		if errors.Is(err, io.EOF) {
 			return ErrBodyRequired
 		}
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			return ErrBodyTooLarge
+		}
 		return ErrInvalidJSON
 	}
 	switch err := dec.Decode(&struct{}{}); {
@@ -43,6 +48,10 @@ func DecodeStrictJSON(w http.ResponseWriter, r *http.Request, dst any, maxBytes 
 	case err == nil:
 		return ErrUnexpectedExtra
 	default:
+		var mbe *http.MaxBytesError
+		if errors.As(err, &mbe) {
+			return ErrBodyTooLarge
+		}
 		return ErrInvalidJSON
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"green-api-test/internal/metrics"
 )
 
 const pathShapeLog = "waInstance/{idInstance}/{method}/{apiTokenInstance}"
@@ -27,6 +29,9 @@ func (t *loggingTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	start := time.Now()
 	resp, err := t.base.RoundTrip(req)
 	dur := time.Since(start)
+
+	op := operationFromContext(req.Context())
+	metrics.RecordUpstreamRoundTrip(op, dur, resp, err)
 
 	attrs := []slog.Attr{
 		slog.String("component", "greenapi"),

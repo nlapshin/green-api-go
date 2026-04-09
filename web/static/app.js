@@ -79,9 +79,9 @@ document.addEventListener("click", (ev) => {
   if (!btn) return;
 
   const action = btn.getAttribute("data-action");
-  if (action === "getSettings") return callAPI("GET", "/api/get-settings");
-  if (action === "getStateInstance") return callAPI("GET", "/api/get-state-instance");
-  if (action === "sendMessage") return callAPI("POST", "/api/send-message", readSendMessage());
+  if (action === "getSettings") return callAPI("GET", "/api/v1/get-settings");
+  if (action === "getStateInstance") return callAPI("GET", "/api/v1/get-state-instance");
+  if (action === "sendMessage") return callAPI("POST", "/api/v1/send-message", readSendMessage());
   if (action === "sendFileByUrl") {
     const fn = $("sf_fileName");
     if (!fn.value.trim()) {
@@ -90,6 +90,6 @@ document.addEventListener("click", (ev) => {
       setOutput("");
       return;
     }
-    return callAPI("POST", "/api/send-file-by-url", readSendFileByUrl());
+    return callAPI("POST", "/api/v1/send-file-by-url", readSendFileByUrl());
   }
 });

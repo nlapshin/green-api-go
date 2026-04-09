@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"html/template"
 	"log/slog"
 	"net/http"
@@ -31,38 +32,53 @@ type Handler struct {
 	tmpl   *template.Template
 }
 
-func New(d Deps) *Handler {
+func New(d Deps) (*Handler, error) {
 	logger := d.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 	if d.Proxy == nil {
-		panic("handler: Proxy is required")
+		return nil, fmt.Errorf("handler: Proxy is required")
 	}
 	tplPath := d.TemplatePath
 	if tplPath == "" {
 		tplPath = filepath.Join("web", "templates", "index.html")
 	}
-	tmpl := template.Must(template.ParseFiles(tplPath))
+	tmpl, err := template.ParseFiles(tplPath)
+	if err != nil {
+		return nil, fmt.Errorf("handler: parse template %q: %w", tplPath, err)
+	}
 	return &Handler{
 		proxy:  d.Proxy,
 		logger: logger,
 		tmpl:   tmpl,
-	}
+	}, nil
 }
 
-// Healthz liveness probe for orchestrators and load balancers.
+// Livez answers whether the process should be restarted (liveness).
 //
-//	@Summary		Health check
+//	@Summary		Liveness probe
 //	@Description	Returns plain text `ok`.
 //	@Tags			system
 //	@Produce		plain
 //	@Success		200	{string}	string	"ok"
-//	@Router			/healthz [get]
-func (h *Handler) Healthz(w http.ResponseWriter, r *http.Request) {
+//	@Router			/livez [get]
+func (h *Handler) Livez(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
+}
+
+// Readyz answers whether the process should receive traffic (readiness). Extend with dependency checks when the service grows.
+//
+//	@Summary		Readiness probe
+//	@Description	Returns plain text `ok` when startup wiring completed successfully.
+//	@Tags			system
+//	@Produce		plain
+//	@Success		200	{string}	string	"ok"
+//	@Router			/readyz [get]
+func (h *Handler) Readyz(w http.ResponseWriter, r *http.Request) {
+	h.Livez(w, r)
 }
 
 // Index serves the bundled HTML demo page (SSR template).
@@ -89,7 +105,7 @@ func (h *Handler) Index(w http.ResponseWriter, r *http.Request) {
 //	@Success		200	{object}	domain.APIResponse	"ok=true, pretty=formatted upstream JSON"
 //	@Failure		400	{object}	domain.APIResponse	"validation_error or invalid_json"
 //	@Failure		502	{object}	domain.APIResponse	"upstream integration error"
-//	@Router			/api/get-settings [get]
+//	@Router			/api/v1/get-settings [get]
 func (h *Handler) APIGetSettings(w http.ResponseWriter, r *http.Request) {
 	h.withConnect(w, r, h.proxy.GetSettings)
 }
@@ -105,7 +121,7 @@ func (h *Handler) APIGetSettings(w http.ResponseWriter, r *http.Request) {
 //	@Success		200	{object}	domain.APIResponse
 //	@Failure		400	{object}	domain.APIResponse
 //	@Failure		502	{object}	domain.APIResponse
-//	@Router			/api/get-state-instance [get]
+//	@Router			/api/v1/get-state-instance [get]
 func (h *Handler) APIGetStateInstance(w http.ResponseWriter, r *http.Request) {
 	h.withConnect(w, r, h.proxy.GetStateInstance)
 }
@@ -123,17 +139,17 @@ func (h *Handler) APIGetStateInstance(w http.ResponseWriter, r *http.Request) {
 //	@Success		200	{object}	domain.APIResponse
 //	@Failure		400	{object}	domain.APIResponse
 //	@Failure		502	{object}	domain.APIResponse
-//	@Router			/api/send-message [post]
+//	@Router			/api/v1/send-message [post]
 func (h *Handler) APISendMessage(w http.ResponseWriter, r *http.Request) {
 	var req domain.SendMessageRequest
-	if err := httpx.DecodeStrictJSON(w, r, &req, 1<<20); err != nil {
-		writeDecodeError(w, err)
+	if err := httpx.DecodeStrictJSON(w, r, &req, domain.MaxJSONRequestBody); err != nil {
+		writeDecodeError(w, r, err)
 		return
 	}
 	httpx.MergeConnectHeaders(r, &req.ConnectRequest)
 	req.Normalize()
 	if err := req.Validate(); err != nil {
-		writeValidationError(w, err)
+		writeValidationError(w, r, err)
 		return
 	}
 
@@ -157,17 +173,17 @@ func (h *Handler) APISendMessage(w http.ResponseWriter, r *http.Request) {
 //	@Success		200	{object}	domain.APIResponse
 //	@Failure		400	{object}	domain.APIResponse
 //	@Failure		502	{object}	domain.APIResponse
-//	@Router			/api/send-file-by-url [post]
+//	@Router			/api/v1/send-file-by-url [post]
 func (h *Handler) APISendFileByURL(w http.ResponseWriter, r *http.Request) {
 	var req domain.SendFileByURLRequest
-	if err := httpx.DecodeStrictJSON(w, r, &req, 1<<20); err != nil {
-		writeDecodeError(w, err)
+	if err := httpx.DecodeStrictJSON(w, r, &req, domain.MaxJSONRequestBody); err != nil {
+		writeDecodeError(w, r, err)
 		return
 	}
 	httpx.MergeConnectHeaders(r, &req.ConnectRequest)
 	req.Normalize()
 	if err := req.Validate(); err != nil {
-		writeValidationError(w, err)
+		writeValidationError(w, r, err)
 		return
 	}
 
@@ -184,7 +200,7 @@ func (h *Handler) withConnect(w http.ResponseWriter, r *http.Request, fn func(co
 	cred := httpx.ConnectFromHeaders(r)
 	cred.Normalize()
 	if err := cred.Validate(); err != nil {
-		writeValidationError(w, err)
+		writeValidationError(w, r, err)
 		return
 	}
 	raw, err := fn(r.Context(), cred)
@@ -200,5 +216,5 @@ func (h *Handler) finishProxy(w http.ResponseWriter, r *http.Request, raw []byte
 	if m.LogMsg != "" {
 		h.logger.LogAttrs(r.Context(), m.LogLevel, m.LogMsg, m.LogAttrs...)
 	}
-	writeAPIError(w, m.HTTPStatus, m.APICode, m.APIMessage, m.Details)
+	writeAPIError(w, r, m.HTTPStatus, m.APICode, m.APIMessage, m.Details)
 }

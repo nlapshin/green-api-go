@@ -35,7 +35,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/get-settings": {
+        "/api/v1/get-settings": {
             "get": {
                 "description": "Forwards to Green-API using ` + "`" + `idInstance` + "`" + ` / ` + "`" + `apiTokenInstance` + "`" + ` from headers.",
                 "produces": [
@@ -83,7 +83,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/get-state-instance": {
+        "/api/v1/get-state-instance": {
             "get": {
                 "description": "Returns authorization / instance state from Green-API.",
                 "produces": [
@@ -131,7 +131,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/send-file-by-url": {
+        "/api/v1/send-file-by-url": {
             "post": {
                 "description": "JSON body: chatId, fileUrl, fileName; optional caption. Headers override embedded credentials.",
                 "consumes": [
@@ -189,7 +189,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/send-message": {
+        "/api/v1/send-message": {
             "post": {
                 "description": "JSON body must include chatId and message. Credentials in headers override body fields when both are present.",
                 "consumes": [
@@ -247,7 +247,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/healthz": {
+        "/livez": {
             "get": {
                 "description": "Returns plain text ` + "`" + `ok` + "`" + `.",
                 "produces": [
@@ -256,7 +256,27 @@ const docTemplate = `{
                 "tags": [
                     "system"
                 ],
-                "summary": "Health check",
+                "summary": "Liveness probe",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "description": "Returns plain text ` + "`" + `ok` + "`" + ` when startup wiring completed successfully.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Readiness probe",
                 "responses": {
                     "200": {
                         "description": "ok",
@@ -277,6 +297,9 @@ const docTemplate = `{
                 },
                 "details": {},
                 "message": {
+                    "type": "string"
+                },
+                "request_id": {
                     "type": "string"
                 }
             }

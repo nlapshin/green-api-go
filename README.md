@@ -2,38 +2,46 @@
 
 Небольшой HTTP-сервис: браузер и клиенты ходят только в этот backend; он валидирует вход, вызывает официальный [Green-API](https://green-api.com) и возвращает единый JSON-оболочкой. Есть веб-интерфейс для ручных вызовов и Swagger UI с описанием API.
 
-**Базовый URL (после деплоя):** `https://YOUR-SERVICE.onrender.com`
-**Swagger UI:** `https://YOUR-SERVICE.onrender.com/swagger/index.html`
+**Базовый URL (после деплоя):** `https://YOUR-SERVICE.onrender.com`  
+**Swagger UI:** `https://YOUR-SERVICE.onrender.com/swagger/index.html`  
+**Метрики (Prometheus):** `GET /metrics`
 
 ## Возможности
 
 - Прокси четырёх методов Green-API: `getSettings`, `getStateInstance`, `sendMessage`, `sendFileByUrl`.
+- Версионированный префикс **`/api/v1`** (старые пути **`/api/...`** оставлены как совместимые алиасы).
 - Валидация `idInstance`, токена, `chatId`, текста и URL файла на границе сервиса.
 - Учётные данные инстанса через заголовки `X-Instance-Id` / `X-Api-Token` (и опционально в теле POST — заголовки перекрывают JSON).
 - Единый формат успеха/ошибки; успех включает pretty-print ответа апстрима в поле `pretty`.
-- `GET /healthz`, статика и HTML-форма для быстрой проверки методов.
+- Ограниченные повторы к апстриму при временных сбоях (см. ниже).
+- Liveness / readiness: **`/livez`**, **`/readyz`**; **`/healthz`** = тот же ответ, что и liveness.
 - Swagger 2.0 из аннотаций ([swaggo/swag](https://github.com/swaggo/swag)) и UI на маршруте `/swagger/`.
+- Метрики Prometheus на `/metrics`.
 
 ## Архитектура
 
 | Пакет | Роль |
 |--------|------|
-| `cmd/app` | Точка входа: конфиг, клиент Green-API, HTTP-сервер, graceful shutdown. |
+| `cmd/app` | Точка входа: конфиг, регистрация метрик, клиент Green-API, HTTP-сервер с таймаутами, graceful shutdown. |
 | `internal/config` | Переменные окружения (`caarlos0/env`), валидация порта и таймаута. |
-| `internal/httpserver` | Chi: middleware (request ID, лог, recover), маршруты, Swagger UI. |
-| `internal/handler` | HTTP-handlers: декод JSON, валидация, вызов прокси, ответы. |
-| `internal/greenapi` | HTTP-клиент к Green-API: base URL, таймаут, маппинг ошибок. |
+| `internal/httpserver` | Chi: request ID, Prometheus HTTP middleware, лог, recover, маршруты, Swagger UI, `/metrics`. |
+| `internal/metrics` | Счётчики и гистограммы Prometheus (HTTP и апстрим). |
+| `internal/handler` | HTTP-handlers: декод JSON (лимит тела), валидация, вызов прокси, ответы. |
+| `internal/greenapi` | HTTP-клиент к Green-API: base URL, таймаут, bounded retry, маппинг ошибок. |
 | `internal/domain` | DTO запросов/ответов API и правила валидации. |
-| `internal/httpx` | Строгий JSON, заголовки подключения, запись JSON-ответов. |
+| `internal/httpx` | Строгий JSON, заголовки подключения, единый JSON для ошибок. |
 | `internal/jsonfmt` | Форматирование сырого JSON апстрима для поля `pretty`. |
 | `docs/` | Спецификация OpenAPI (swag): `swagger.json`, `docs.go` (обновление — см. ниже). |
 | `web/` | Шаблон `index.html`, стили и скрипты веб-интерфейса. |
 
-Поток: **клиент → handler → greenapi.Client → Green-API**; тело ответа апстрима не парсится в структуры — сохраняется как `[]byte` и отдаётся обёрнутым.
+### Поток запроса
+
+**Клиент → Chi (middleware: RequestID → Prometheus → лог → recover) → handler → `greenapi.Client` (retry + transport с метриками) → Green-API.**  
+Тело ответа апстрима не парсится в структуры — сохраняется как `[]byte` и отдаётся обёрнутым в `pretty`.
 
 ## Требования
 
-- Go **1.22+**
+- Go **1.24+** (в тестах используется `testing.Chdir`; Docker-образ на базе `golang:1.24-alpine`).
 - [Task](https://taskfile.dev/installation/) (опционально, для алиасов из `Taskfile.yml`)
 
 ## Локальный запуск
@@ -56,7 +64,7 @@
    go run ./cmd/app
    ```
 
-3. Откройте `http://localhost:8080` (или порт из `APP_PORT`). Swagger: `http://localhost:8080/swagger/index.html`.
+3. Откройте `http://localhost:8080` (или порт из `APP_PORT`). Swagger: `http://localhost:8080/swagger/index.html`. Метрики: `http://localhost:8080/metrics`.
 
 ### Обновление спецификации Swagger
 
@@ -97,7 +105,7 @@ docker compose up --build
 | `PORT` | нет | — | Используется только когда **`APP_PORT` не задан**; типично выставляется платформой деплоя. |
 | `WEB_ROOT` | нет | `.` | Корень проекта для `web/templates/index.html` и статики; при старте проверяется наличие шаблона. |
 | `GREEN_API_BASE_URL` | нет | `https://api.green-api.com` | Базовый URL Green-API. |
-| `GREEN_API_TIMEOUT` | нет | `15s` | Таймаут HTTP-клиента к Green-API. |
+| `GREEN_API_TIMEOUT` | нет | `15s` | Общий дедлайн **одного вызова** клиента к Green-API (включая повторы; см. retry). |
 
 ## HTTP API
 
@@ -112,12 +120,17 @@ docker compose up --build
 
 | Метод | Путь | Заголовки | Тело | Успешный ответ |
 |-------|------|-----------|------|----------------|
-| GET | `/healthz` | — | — | `200`, текст `ok` |
+| GET | `/livez` | — | — | `200`, текст `ok` |
+| GET | `/readyz` | — | — | `200`, текст `ok` |
+| GET | `/healthz` | — | — | то же, что `/livez` |
+| GET | `/metrics` | — | — | Prometheus text exposition |
 | GET | `/` | — | — | `200`, HTML веб-интерфейса |
-| GET | `/api/get-settings` | Обязательны `X-Instance-Id`, `X-Api-Token` | — | JSON оболочка, `pretty` — отформатированный ответ Green-API |
-| GET | `/api/get-state-instance` | То же | — | То же |
-| POST | `/api/send-message` | Рекомендуется то же (или учётные данные в теле) | `Content-Type: application/json` | То же |
-| POST | `/api/send-file-by-url` | То же | JSON с `chatId`, `fileUrl`, `fileName`; опционально `caption` | То же |
+| GET | `/api/v1/get-settings` | Обязательны `X-Instance-Id`, `X-Api-Token` | — | JSON оболочка, `pretty` — отформатированный ответ Green-API |
+| GET | `/api/v1/get-state-instance` | То же | — | То же |
+| POST | `/api/v1/send-message` | Рекомендуется то же (или учётные данные в теле) | `Content-Type: application/json` | То же |
+| POST | `/api/v1/send-file-by-url` | То же | JSON с `chatId`, `fileUrl`, `fileName`; опционально `caption` | То же |
+
+Эквивалентные пути без `v1`: `/api/get-settings` и т.д. (legacy).
 
 Статика: `GET /static/*`.
 
@@ -156,7 +169,7 @@ docker compose up --build
 }
 ```
 
-Ошибка (клиент/валидация или прокси):
+Ошибка (клиент/валидация или прокси) — единый объект `error` с **`request_id`** (из middleware Chi, тот же id что в логах):
 
 ```json
 {
@@ -164,28 +177,70 @@ docker compose up --build
   "error": {
     "code": "validation_error",
     "message": "Validation error",
+    "request_id": "…",
     "details": { "field": "reason" }
   }
 }
 ```
 
-Типичные коды ошибок прокси: `upstream_timeout`, `upstream_rate_limited`, `upstream_auth_error`, `upstream_invalid_response`; в `details` могут быть `status`, `retryable`, `body_snippet`, при 429 — `retry_after`.
+В ответы **не попадают** сырые тексты апстрима или внутренние стектрейсы; для интеграционных ошибок по-прежнему используется маппинг в `internal/greenapi` (коды вроде `upstream_timeout`, `upstream_rate_limited`, …). В `details` при необходимости остаются обезличенные подсказки (`status`, `retryable`, усечённый `body_snippet`, при 429 — `retry_after`).
+
+Превышение лимита тела JSON (`1 MiB`): `413`, код `payload_too_large`.
 
 ### Ограничения домена
 
 - `chatId`: суффикс `@c.us` (личные) или `@g.us` (группы).
 - Лимиты и состояние инстанса задаются стороной Green-API.
 
+## Таймауты и HTTP-сервер
+
+| Параметр | Значение | Зачем |
+|----------|-----------|--------|
+| `ReadHeaderTimeout` | 5s | Защита от slowloris на фазе заголовков. |
+| `ReadTimeout` | 30s | Верхняя граница чтения запроса целиком. |
+| `WriteTimeout` | 45s | Верхняя граница записи ответа. |
+| `IdleTimeout` | 120s | Закрытие неактивных keep-alive соединений. |
+| `MaxHeaderBytes` | 1 MiB | Потолок размера заголовков. |
+| Лимит JSON-тела (POST) | 1 MiB | `http.MaxBytesReader` в `httpx.DecodeStrictJSON`. |
+| `GREEN_API_TIMEOUT` | 15s (env) | Дедлайн контекста на один вызов `greenapi.Client` (все попытки retry внутри него). |
+
+## Повторные запросы к Green-API
+
+Клиент делает до **4 попыток** (первая + до **3** повторов) только если:
+
+- транспортная ошибка (кроме отмены контекста пользователем), или
+- HTTP **408**, **429**, **5xx** (502, 503, 504 и т.д. по таблице `HTTPError.Retryable()`),
+
+и при этом **не истёк** контекст/deadline вызова. Повторы **не** выполняются для типичных **4xx** (кроме перечисленных). Между попытками — **экспоненциальная задержка** (от 50 ms с потолком 2 s) и **jitter**. Отмена клиентом (`context.Canceled`) обрабатывается сразу, без «лишних» sleep.
+
+## Метрики (Prometheus)
+
+Эндпоинт: **`GET /metrics`**.
+
+| Метрика | Назначение |
+|---------|------------|
+| `greenapi_facade_http_requests_total` | Счётчик HTTP-запросов (`method`, `route` — шаблон Chi, `status_class`: 2xx/3xx/4xx/5xx). |
+| `greenapi_facade_http_request_duration_seconds` | Длительность обработки HTTP-запроса. |
+| `greenapi_facade_upstream_requests_total` | Исходящие запросы к Green-API (**каждая попытка**, включая retry), лейбл `op`. |
+| `greenapi_facade_upstream_request_duration_seconds` | Длительность одного исходящего round-trip. |
+| `greenapi_facade_upstream_errors_total` | Ошибки апстрима по попытке: `transport`, `canceled`, `rate_limit` (429), `http_5xx`. |
+
+Лейблы держатся **низкозначностными** (без сырого URL, chatId, токенов).
+
+## CI
+
+В репозитории есть GitHub Actions (`.github/workflows/ci.yml`): `go test ./...`, `go vet ./...`, `golangci-lint run`. Конфиг линтера: `.golangci.yml`.
+
 ## Примеры curl
 
 ```bash
-curl -sS http://localhost:8080/api/get-settings \
+curl -sS http://localhost:8080/api/v1/get-settings \
   -H 'X-Instance-Id: 1101234567' \
   -H 'X-Api-Token: YOUR_TOKEN'
 ```
 
 ```bash
-curl -sS http://localhost:8080/api/send-message \
+curl -sS http://localhost:8080/api/v1/send-message \
   -H 'Content-Type: application/json; charset=utf-8' \
   -H 'X-Instance-Id: 1101234567' \
   -H 'X-Api-Token: YOUR_TOKEN' \
@@ -196,16 +251,16 @@ curl -sS http://localhost:8080/api/send-message \
 
 ## Design decisions / trade-offs
 
-- **Сырой JSON от Green-API.** Клиент прокси возвращает `[]byte`, ответ отдаётся в `pretty` без привязки к конкретной версии схемы Green-API. Плюс: меньше ломается при изменениях апстрима; минус: типобезопасность только на границе своего API, не внутри полей Green-API.
-- **Без retry.** Повторы с токенами и неидемпотентными POST усложняют семантику и могут усугубить rate limit. Клиент или оркестратор могут решать политику повторов осознанно.
-- **Учётные данные в заголовках на своём boundary.** Так проще вызывать API из браузера и из `curl`, не светя токен в URL; заголовки перекрывают JSON, чтобы один и тот же контракт работал и для GET-only сценариев.
-- **Swagger 2.0 через аннотации.** Спецификация живёт рядом с кодом и обновляется вместе с handlers; отдельный контур «схема → клиент» здесь не используется.
+- **Сырой JSON от Green-API.** Клиент прокси возвращает `[]byte`, ответ отдаётся в `pretty` без привязки к конкретной версии схемы Green-API. Плюс: меньше ломается при изменениях апстрима; минус: типобезопасность только на границе своего API.
+- **Небольшой bounded retry.** Повторы ограничены, с backoff и уважением к `context`; снижают шум от кратковременных 503/сети, но **POST** к апстриму теоретически могут выполниться более одного раза при сбое после принятия запроса апстримом — осознанный компромисс для этого маленького фасада.
+- **Учётные данные в заголовках на своём boundary.** Так проще вызывать API из браузера и из `curl`, не светя токен в URL; заголовки перекрывают JSON.
+- **Swagger 2.0 через аннотации.** Спецификация живёт рядом с кодом; отдельный контур «схема → клиент» здесь не используется.
+- **Намеренно компактный сервис:** нет отдельного слоя repository, очередей и т.д. — только то, что повышает надёжность и наблюдаемость без раздувания архитектуры.
 
 ## Возможные улучшения
 
-- Метрики (Prometheus), трассировка, бюджетные лимиты на размер тел.
-- Опциональный retry только для идемпотентных GET с backoff и учётом `Retry-After`.
-- Версионирование API (`/v1/...`), отдельный redoc/openapi3 при росте контракта.
+- Расширить `/readyz` реальной проверкой зависимостей (БД, очередь), когда они появятся.
+- OpenAPI 3 / отдельный redoc при росте контракта.
 - E2E с записанным Green-API или wiremock.
 
 ## Деплой
@@ -224,6 +279,7 @@ curl -sS http://localhost:8080/api/send-message \
 cmd/app/main.go
 internal/config
 internal/httpserver
+internal/metrics
 internal/handler
 internal/greenapi
 internal/domain
@@ -232,6 +288,7 @@ internal/jsonfmt
 docs/                 # OpenAPI (swag)
 web/templates/index.html
 web/static/
+.github/workflows/
 Dockerfile
 docker-compose.yml
 Taskfile.yml

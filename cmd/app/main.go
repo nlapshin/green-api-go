@@ -19,10 +19,13 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/joho/godotenv"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"green-api-test/internal/config"
 	"green-api-test/internal/greenapi"
 	"green-api-test/internal/handler"
 	"green-api-test/internal/httpserver"
+	"green-api-test/internal/metrics"
 
 	_ "green-api-test/docs" // OpenAPI (swag)
 )
@@ -42,6 +45,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	metrics.Register(prometheus.DefaultRegisterer)
+
 	ga, err := greenapi.NewClient(greenapi.Config{
 		BaseURL: cfg.GreenAPIBaseURL,
 		Timeout: cfg.GreenAPITimeout,
@@ -55,11 +60,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	h := handler.New(handler.Deps{
+	h, err := handler.New(handler.Deps{
 		Proxy:        ga,
 		Logger:       log,
 		TemplatePath: cfg.IndexTemplatePath(),
 	})
+	if err != nil {
+		log.Error("handler init failed", slog.String("error", err.Error()))
+		os.Exit(1)
+	}
 
 	srv := httpserver.New(httpserver.Deps{
 		Handler:   h,
@@ -70,7 +79,14 @@ func main() {
 	httpSrv := &http.Server{
 		Addr:              cfg.Addr(),
 		Handler:           srv.Routes(),
-		ReadHeaderTimeout: 5 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second, // limit request-line + headers phase (slowloris)
+		// Full request body read is bounded per handler (MaxBytesReader); ReadTimeout caps total read time.
+		ReadTimeout: 30 * time.Second,
+		// Response write time; keep above upstream timeout so we can still serialize errors.
+		WriteTimeout: 45 * time.Second,
+		// IdleTimeout recycles keep-alive connections; slightly above typical client reuse interval.
+		IdleTimeout:    120 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1 MiB — same order as body cap; enough for cookies + custom headers
 	}
 
 	go func() {

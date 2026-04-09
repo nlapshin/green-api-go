@@ -44,3 +44,15 @@ func TestDecodeStrictJSON_unknownField(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestDecodeStrictJSON_bodyTooLarge(t *testing.T) {
+	large := `{"a":"` + strings.Repeat("x", 2048) + `"}`
+	r := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(large))
+	var v struct {
+		A string `json:"a"`
+	}
+	err := DecodeStrictJSON(httptest.NewRecorder(), r, &v, 64)
+	if err != ErrBodyTooLarge {
+		t.Fatalf("want ErrBodyTooLarge, got %v", err)
+	}
+}

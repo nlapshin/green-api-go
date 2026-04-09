@@ -7,6 +7,8 @@ definitions:
       details: {}
       message:
         type: string
+      request_id:
+        type: string
     type: object
   green-api-test_internal_domain.APIResponse:
     properties:
@@ -65,7 +67,7 @@ paths:
       summary: Demo UI
       tags:
       - ui
-  /api/get-settings:
+  /api/v1/get-settings:
     get:
       description: Forwards to Green-API using `idInstance` / `apiTokenInstance` from
         headers.
@@ -98,7 +100,7 @@ paths:
       summary: Get instance settings
       tags:
       - api
-  /api/get-state-instance:
+  /api/v1/get-state-instance:
     get:
       description: Returns authorization / instance state from Green-API.
       parameters:
@@ -130,7 +132,7 @@ paths:
       summary: Get instance state
       tags:
       - api
-  /api/send-file-by-url:
+  /api/v1/send-file-by-url:
     post:
       consumes:
       - application/json
@@ -169,7 +171,7 @@ paths:
       summary: Send file by URL
       tags:
       - api
-  /api/send-message:
+  /api/v1/send-message:
     post:
       consumes:
       - application/json
@@ -208,7 +210,7 @@ paths:
       summary: Send text message
       tags:
       - api
-  /healthz:
+  /livez:
     get:
       description: Returns plain text `ok`.
       produces:
@@ -218,7 +220,20 @@ paths:
           description: ok
           schema:
             type: string
-      summary: Health check
+      summary: Liveness probe
+      tags:
+      - system
+  /readyz:
+    get:
+      description: Returns plain text `ok` when startup wiring completed successfully.
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: ok
+          schema:
+            type: string
+      summary: Readiness probe
       tags:
       - system
 swagger: "2.0"

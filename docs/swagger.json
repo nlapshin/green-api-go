@@ -28,7 +28,7 @@
                 }
             }
         },
-        "/api/get-settings": {
+        "/api/v1/get-settings": {
             "get": {
                 "description": "Forwards to Green-API using `idInstance` / `apiTokenInstance` from headers.",
                 "produces": [
@@ -76,7 +76,7 @@
                 }
             }
         },
-        "/api/get-state-instance": {
+        "/api/v1/get-state-instance": {
             "get": {
                 "description": "Returns authorization / instance state from Green-API.",
                 "produces": [
@@ -124,7 +124,7 @@
                 }
             }
         },
-        "/api/send-file-by-url": {
+        "/api/v1/send-file-by-url": {
             "post": {
                 "description": "JSON body: chatId, fileUrl, fileName; optional caption. Headers override embedded credentials.",
                 "consumes": [
@@ -182,7 +182,7 @@
                 }
             }
         },
-        "/api/send-message": {
+        "/api/v1/send-message": {
             "post": {
                 "description": "JSON body must include chatId and message. Credentials in headers override body fields when both are present.",
                 "consumes": [
@@ -240,7 +240,7 @@
                 }
             }
         },
-        "/healthz": {
+        "/livez": {
             "get": {
                 "description": "Returns plain text `ok`.",
                 "produces": [
@@ -249,7 +249,27 @@
                 "tags": [
                     "system"
                 ],
-                "summary": "Health check",
+                "summary": "Liveness probe",
+                "responses": {
+                    "200": {
+                        "description": "ok",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "description": "Returns plain text `ok` when startup wiring completed successfully.",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Readiness probe",
                 "responses": {
                     "200": {
                         "description": "ok",
@@ -270,6 +290,9 @@
                 },
                 "details": {},
                 "message": {
+                    "type": "string"
+                },
+                "request_id": {
                     "type": "string"
                 }
             }
